@@ -1,10 +1,16 @@
 package main
 
 import (
+	"context"
 	"fmt"
+	"log"
 	"os"
+	"os/signal"
+	"syscall"
+	"time"
 
 	"github.com/RevEngine3r/whatsapp-proxy-go/internal/config"
+	"github.com/RevEngine3r/whatsapp-proxy-go/internal/proxy"
 	"github.com/spf13/cobra"
 )
 
@@ -21,10 +27,11 @@ var rootCmd = &cobra.Command{
 	Long: `A lightweight, cross-platform WhatsApp proxy server written in Go.
 
 Supports:
-  - Single port operation for all protocols
+  - Single port operation for all protocols (HTTP, HTTPS, Jabber)
   - Upstream SOCKS5 proxy with authentication
   - Auto-generated SSL certificates
-  - Metrics endpoint for monitoring`,
+  - Metrics endpoint for monitoring
+  - Protocol detection and routing`,
 	Version: Version,
 	RunE:    run,
 }
@@ -62,29 +69,78 @@ func run(cmd *cobra.Command, args []string) error {
 	}
 
 	// Display configuration summary
-	fmt.Printf("WhatsApp Proxy Go v%s\n", Version)
+	printBanner()
+	printConfig(cfg)
+
+	// Create proxy server
+	server, err := proxy.New(cfg)
+	if err != nil {
+		return fmt.Errorf("failed to create server: %w", err)
+	}
+
+	// Start server
+	if err := server.Start(); err != nil {
+		return fmt.Errorf("failed to start server: %w", err)
+	}
+
+	log.Println("[INFO] Server started successfully")
+	log.Println("[INFO] Press Ctrl+C to stop")
+
+	// Wait for interrupt signal
+	sigChan := make(chan os.Signal, 1)
+	signal.Notify(sigChan, os.Interrupt, syscall.SIGTERM)
+	<-sigChan
+
+	log.Println("[INFO] Interrupt received, shutting down...")
+
+	// Graceful shutdown with 30 second timeout
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+
+	if err := server.Shutdown(ctx); err != nil {
+		return fmt.Errorf("shutdown error: %w", err)
+	}
+
+	log.Println("[INFO] Server stopped gracefully")
+	return nil
+}
+
+func printBanner() {
+	fmt.Println()
+	fmt.Println("┏━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┓")
+	fmt.Println("┃  WhatsApp Proxy Go                    ┃")
+	fmt.Printf("┃  Version: %-28s ┃\n", Version)
+	fmt.Println("┗━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┛")
+	fmt.Println()
+}
+
+func printConfig(cfg *config.Config) {
+	fmt.Println("🚀 Configuration:")
 	fmt.Println("===============================================")
-	fmt.Printf("Server: %s\n", cfg.Server.GetAddress())
-	fmt.Printf("SOCKS5 Proxy: ")
+	fmt.Printf("🎯 Server:        %s\n", cfg.Server.GetAddress())
+
+	fmt.Printf("🔌 SOCKS5 Proxy:  ")
 	if cfg.SOCKS5.Enabled {
 		fmt.Printf("Enabled (%s)\n", cfg.SOCKS5.GetAddress())
+		if cfg.SOCKS5.HasAuth() {
+			fmt.Println("             with authentication")
+		}
 	} else {
-		fmt.Println("Disabled")
+		fmt.Println("Disabled (direct connection)")
 	}
-	fmt.Printf("SSL: Auto-generate=%v\n", cfg.SSL.AutoGenerate)
-	fmt.Printf("Log Level: %s\n", cfg.Logging.Level)
+
+	fmt.Printf("🔐 SSL:           Auto-generate=%v\n", cfg.SSL.AutoGenerate)
+	fmt.Printf("📝 Log Level:     %s\n", cfg.Logging.Level)
+
 	if cfg.Metrics.Enabled {
-		fmt.Printf("Metrics: http://%s/metrics\n", cfg.Metrics.GetAddress())
+		fmt.Printf("📊 Metrics:       http://%s/metrics\n", cfg.Metrics.GetAddress())
+		fmt.Printf("             http://%s/health\n", cfg.Metrics.GetAddress())
 	} else {
-		fmt.Println("Metrics: Disabled")
+		fmt.Println("📊 Metrics:       Disabled")
 	}
+
 	fmt.Println("===============================================")
-
-	fmt.Println("\n✅ Configuration loaded and validated successfully!")
-	fmt.Println("\n🚧 Step 2 Complete - Configuration Management")
-	fmt.Println("Next: SOCKS5 client implementation")
-
-	return nil
+	fmt.Println()
 }
 
 func main() {
