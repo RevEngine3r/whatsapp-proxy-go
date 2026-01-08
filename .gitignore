@@ -1,0 +1,59 @@
+# Binaries
+*.exe
+*.exe~
+*.dll
+*.so
+*.dylib
+
+# Build output
+dist/
+bin/
+
+# Test binary, built with `go test -c`
+*.test
+
+# Output of the go coverage tool
+*.out
+coverage.html
+
+# Go workspace file
+go.work
+
+# Dependency directories
+vendor/
+
+# IDEs
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.DS_Store
+
+# Logs
+*.log
+logs/
+
+# Configuration files (except examples)
+config.yaml
+config.yml
+config.json
+!config.example.yaml
+!config.example.yml
+
+# SSL certificates
+*.pem
+*.key
+*.crt
+*.cert
+certs/
+
+# Local development
+.env
+.env.local
+tmp/
+temp/
+
+# Air (hot reload)
+.air.toml
+tmp/

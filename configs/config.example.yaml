@@ -1,0 +1,187 @@
+# WhatsApp Proxy Go - Configuration File
+# Full configuration reference with all available options
+
+# ==============================================
+# Server Configuration
+# ==============================================
+server:
+  # Port to listen on for proxy connections
+  # Single port handles HTTP, HTTPS, and Jabber/XMPP protocols
+  # Default: 8443
+  port: 8443
+  
+  # Bind address (0.0.0.0 for all interfaces, 127.0.0.1 for localhost only)
+  # Default: 0.0.0.0
+  bind_addr: 0.0.0.0
+  
+  # Connection idle timeout in seconds
+  # Connections will be closed after this period of inactivity
+  # Default: 300 (5 minutes)
+  idle_timeout: 300
+  
+  # Maximum number of concurrent connections
+  # Set to 0 for unlimited (not recommended for production)
+  # Default: 1000
+  max_connections: 1000
+
+# ==============================================
+# SOCKS5 Upstream Proxy Configuration
+# ==============================================
+socks5:
+  # Enable upstream SOCKS5 proxy
+  # When enabled, all outbound connections go through the SOCKS5 proxy
+  # Default: false
+  enabled: true
+  
+  # SOCKS5 proxy host (hostname or IP address)
+  # Required when enabled is true
+  host: 127.0.0.1
+  
+  # SOCKS5 proxy port
+  # Default: 1080
+  port: 1080
+  
+  # SOCKS5 authentication username
+  # Leave empty if proxy doesn't require authentication
+  username: ""
+  
+  # SOCKS5 authentication password
+  # Leave empty if proxy doesn't require authentication
+  password: ""
+  
+  # Connection timeout in seconds
+  # How long to wait when connecting to the SOCKS5 proxy
+  # Default: 30
+  timeout: 30
+
+# ==============================================
+# SSL/TLS Certificate Configuration
+# ==============================================
+ssl:
+  # Auto-generate self-signed certificates
+  # When true, certificates are generated automatically on startup
+  # Certificates are cached in memory and on disk for reuse
+  # Default: true
+  auto_generate: true
+  
+  # Custom certificate file path (PEM format)
+  # Used only when auto_generate is false
+  # Must be a valid X.509 certificate
+  cert_file: ""
+  
+  # Custom private key file path (PEM format)
+  # Used only when auto_generate is false
+  # Must match the certificate
+  key_file: ""
+  
+  # DNS names to include in Subject Alternative Names (SANs)
+  # Used when auto-generating certificates
+  # Add all hostnames that clients will use to connect
+  dns_names:
+    - localhost
+    - proxy.example.com
+  
+  # IP addresses to include in Subject Alternative Names (SANs)
+  # Used when auto-generating certificates
+  # Add all IP addresses that clients will use to connect
+  ip_addresses:
+    - 127.0.0.1
+    # - 192.168.1.100
+  
+  # Certificate validity period in days
+  # Only applies to auto-generated certificates
+  # Default: 365 (1 year)
+  validity_days: 365
+
+# ==============================================
+# Logging Configuration
+# ==============================================
+logging:
+  # Log level: debug, info, warn, error
+  # - debug: Verbose output including protocol detection details
+  # - info: Standard operational messages
+  # - warn: Warning messages for potential issues
+  # - error: Only error messages
+  # Default: info
+  level: info
+  
+  # Log format: text, json
+  # - text: Human-readable format
+  # - json: Structured JSON format (better for log aggregation)
+  # Default: text
+  format: text
+  
+  # Log output destination
+  # - stdout: Standard output (console)
+  # - stderr: Standard error
+  # - /path/to/file.log: Write to file
+  # Default: stdout
+  output: stdout
+
+# ==============================================
+# Metrics and Monitoring Configuration
+# ==============================================
+metrics:
+  # Enable Prometheus-compatible metrics endpoint
+  # Exposes /metrics endpoint with OpenMetrics format
+  # Default: true
+  enabled: true
+  
+  # Port for metrics HTTP server
+  # Separate from main proxy port for security
+  # Default: 8199
+  port: 8199
+  
+  # Bind address for metrics server
+  # 127.0.0.1 recommended for security (localhost only)
+  # Use 0.0.0.0 only if metrics need to be accessible externally
+  # Default: 127.0.0.1
+  bind_addr: 127.0.0.1
+
+# ==============================================
+# Usage Examples
+# ==============================================
+
+# Example 1: Basic setup without upstream proxy
+# server:
+#   port: 8443
+# socks5:
+#   enabled: false
+# ssl:
+#   auto_generate: true
+
+# Example 2: With authenticated SOCKS5 upstream
+# server:
+#   port: 8443
+# socks5:
+#   enabled: true
+#   host: proxy.example.com
+#   port: 1080
+#   username: myuser
+#   password: mypassword
+
+# Example 3: Production with custom certificates
+# server:
+#   port: 443
+#   bind_addr: 0.0.0.0
+#   max_connections: 5000
+# ssl:
+#   auto_generate: false
+#   cert_file: /etc/ssl/certs/proxy.crt
+#   key_file: /etc/ssl/private/proxy.key
+# logging:
+#   level: warn
+#   format: json
+#   output: /var/log/whatsapp-proxy/proxy.log
+
+# ==============================================
+# Security Considerations
+# ==============================================
+# 1. Keep SOCKS5 credentials secure (use environment variables for sensitive data)
+# 2. Restrict metrics endpoint to localhost or trusted networks
+# 3. Use proper file permissions for config file (chmod 600)
+# 4. Consider using custom SSL certificates for production
+# 5. Set appropriate max_connections limit for your system
+# 6. Regularly rotate certificates (validity_days)
+# 7. Enable structured logging (json) for better monitoring
+# 8. Use firewall rules to restrict access to proxy port
