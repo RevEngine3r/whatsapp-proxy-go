@@ -1,0 +1,50 @@
+# Build Ignore Patterns
+# Files and directories to exclude from release builds
+
+# Git and version control
+.git
+.github
+.gitignore
+
+# Documentation and project management
+ROAD_MAP
+PROGRESS.md
+PROJECT_MAP.md
+RELEASE.md
+README.md
+INSTALL.md
+CONFIGURATION.md
+*.md
+
+# Build and release artifacts
+dist
+releases
+build
+bin
+coverage.txt
+*.backup
+
+# Scripts
+scripts
+*.ps1
+*.bat
+.buildignore
+
+# Development files
+.env
+.env.*
+!.env.example
+*.log
+*.test
+
+# IDE and editor files
+.vscode
+.idea
+*.swp
+*.swo
+*~
+
+# OS files
+.DS_Store
+Thumbs.db
+desktop.ini

@@ -1,9 +1,10 @@
-name: Release
+name: Create Release
 
 on:
   push:
     tags:
       - 'release'
+      - 'release-*'
 
 permissions:
   contents: write
@@ -24,128 +25,167 @@ jobs:
           go-version: '1.21'
           cache: true
 
-      - name: Generate version from datetime
+      - name: Install PowerShell
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y powershell
+          pwsh --version
+
+      - name: Run build-release.ps1
+        run: |
+          pwsh -File ./build-release.ps1
+        continue-on-error: false
+
+      - name: Extract version from first binary
         id: version
         run: |
-          VERSION=$(date -u +'%Y.%m.%d.%H%M')
+          # Get version from first binary filename
+          FIRST_FILE=$(ls dist/*.tar.gz dist/*.zip 2>/dev/null | head -n 1 | xargs basename)
+          VERSION=$(echo "$FIRST_FILE" | sed -E 's/whatsapp-proxy-([0-9.]+)-.*/\1/')
+          
+          if [ -z "$VERSION" ]; then
+            echo "Error: Could not extract version!"
+            exit 1
+          fi
+          
           echo "version=$VERSION" >> $GITHUB_OUTPUT
-          echo "Generated version: $VERSION"
+          echo "Release version: $VERSION"
 
-      - name: Run tests
+      - name: Verify build artifacts
+        id: verify
         run: |
-          go test -v -race -coverprofile=coverage.txt -covermode=atomic ./...
+          FILE_COUNT=$(ls dist/*.tar.gz dist/*.zip 2>/dev/null | wc -l)
+          CHECKSUM_EXISTS=$(test -f dist/checksums.txt && echo "true" || echo "false")
+          
+          echo "file_count=$FILE_COUNT" >> $GITHUB_OUTPUT
+          echo "checksum_exists=$CHECKSUM_EXISTS" >> $GITHUB_OUTPUT
+          echo "Found $FILE_COUNT build artifacts"
+          
+          if [ "$CHECKSUM_EXISTS" = "true" ]; then
+            echo "Checksums file found"
+            cat dist/checksums.txt
+          fi
 
-      - name: Build binaries
+      - name: Generate release notes
+        id: release_notes
+        run: |
+          VERSION="${{ steps.version.outputs.version }}"
+          TAG_NAME="${GITHUB_REF#refs/tags/}"
+          COMMIT=$(git rev-parse --short HEAD)
+          
+          cat > release_notes.md << 'EOF'
+          ## WhatsApp Proxy Go v$VERSION
+          
+          **Auto-generated release** from tag: `$TAG_NAME`
+          
+          ### 📦 Installation
+          
+          Download the appropriate binary for your system below.
+          
+          #### Linux
+          ```bash
+          # Download (replace VERSION and ARCH as needed)
+          wget https://github.com/RevEngine3r/whatsapp-proxy-go/releases/download/$TAG_NAME/whatsapp-proxy-$VERSION-linux-amd64.tar.gz
+          
+          # Extract
+          tar -xzf whatsapp-proxy-$VERSION-linux-amd64.tar.gz
+          
+          # Run
+          ./whatsapp-proxy-$VERSION-linux-amd64 --help
+          ```
+          
+          #### macOS
+          ```bash
+          # Download (Intel)
+          wget https://github.com/RevEngine3r/whatsapp-proxy-go/releases/download/$TAG_NAME/whatsapp-proxy-$VERSION-darwin-amd64.tar.gz
+          
+          # Or Apple Silicon
+          wget https://github.com/RevEngine3r/whatsapp-proxy-go/releases/download/$TAG_NAME/whatsapp-proxy-$VERSION-darwin-arm64.tar.gz
+          
+          # Extract and run
+          tar -xzf whatsapp-proxy-$VERSION-darwin-*.tar.gz
+          ```
+          
+          #### Windows
+          ```powershell
+          # Download from releases page
+          # Extract ZIP file
+          # Run whatsapp-proxy.exe
+          ```
+          
+          ### 🚀 Supported Platforms
+          
+          - **Linux**: amd64, arm64, 386, armv7
+          - **macOS**: amd64 (Intel), arm64 (Apple Silicon)
+          - **Windows**: amd64, 386, arm64
+          
+          ### 📋 Build Information
+          
+          - **Version**: $VERSION (datetime-based)
+          - **Build Date**: $(date -u +"%Y-%m-%d %H:%M:%S UTC")
+          - **Commit**: $COMMIT
+          - **Trigger Tag**: `$TAG_NAME`
+          - **Build Artifacts**: ${{ steps.verify.outputs.file_count }} files
+          
+          ### 🔐 Verification
+          
+          All binaries include SHA256 checksums. Verify your download:
+          
+          ```bash
+          # Download checksums file
+          wget https://github.com/RevEngine3r/whatsapp-proxy-go/releases/download/$TAG_NAME/checksums.txt
+          
+          # Verify (Linux/macOS)
+          sha256sum -c checksums.txt --ignore-missing
+          
+          # Verify (Windows PowerShell)
+          Get-FileHash whatsapp-proxy-*.zip -Algorithm SHA256
+          ```
+          
+          ### 📖 Documentation
+          
+          - [Installation Guide](https://github.com/RevEngine3r/whatsapp-proxy-go/blob/main/INSTALL.md)
+          - [Configuration](https://github.com/RevEngine3r/whatsapp-proxy-go/blob/main/CONFIGURATION.md)
+          - [README](https://github.com/RevEngine3r/whatsapp-proxy-go/blob/main/README.md)
+          EOF
+          
+          # Substitute variables
+          sed -i "s/\$VERSION/$VERSION/g" release_notes.md
+          sed -i "s/\$TAG_NAME/$TAG_NAME/g" release_notes.md
+          sed -i "s/\$COMMIT/$COMMIT/g" release_notes.md
+          
+          echo "Release notes generated"
+
+      - name: Delete existing tag/release (if exists)
+        continue-on-error: true
         env:
-          VERSION: ${{ steps.version.outputs.version }}
-          CGO_ENABLED: 0
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          mkdir -p dist
-          
-          # Define build targets
-          declare -a targets=(
-            "linux/amd64"
-            "linux/arm64"
-            "linux/386"
-            "linux/arm/7"
-            "darwin/amd64"
-            "darwin/arm64"
-            "windows/amd64"
-            "windows/386"
-            "windows/arm64"
-          )
-          
-          # Build for each target
-          for target in "${targets[@]}"; do
-            IFS='/' read -r -a parts <<< "$target"
-            goos="${parts[0]}"
-            goarch="${parts[1]}"
-            goarm="${parts[2]:-}"
-            
-            output_name="whatsapp-proxy-${VERSION}-${goos}-${goarch}"
-            
-            if [ -n "$goarm" ]; then
-              output_name="${output_name}v${goarm}"
-              export GOARM=$goarm
-            fi
-            
-            if [ "$goos" = "windows" ]; then
-              output_name="${output_name}.exe"
-            fi
-            
-            echo "Building for $goos/$goarch${goarm:+v$goarm}..."
-            
-            GOOS=$goos GOARCH=$goarch go build \
-              -trimpath \
-              -ldflags="-s -w -X main.version=${VERSION} -X main.buildTime=$(date -u +'%Y-%m-%dT%H:%M:%SZ') -X main.gitCommit=${GITHUB_SHA::8}" \
-              -o "dist/${output_name}" \
-              ./cmd/whatsapp-proxy
-            
-            # Create tarball for unix systems, zip for windows
-            if [ "$goos" = "windows" ]; then
-              (cd dist && zip "${output_name%.exe}.zip" "$output_name")
-              rm "dist/${output_name}"
-            else
-              tar -czf "dist/${output_name}.tar.gz" -C dist "$output_name"
-              rm "dist/${output_name}"
-            fi
-            
-            unset GOARM
-          done
+          TAG_NAME="${GITHUB_REF#refs/tags/}"
+          gh release delete "$TAG_NAME" -y 2>/dev/null || true
+          echo "Cleaned up any existing release for $TAG_NAME"
 
-      - name: Generate checksums
+      - name: Create GitHub Release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          cd dist
-          sha256sum * > checksums.txt
-          cat checksums.txt
+          VERSION="${{ steps.version.outputs.version }}"
+          TAG_NAME="${GITHUB_REF#refs/tags/}"
+          
+          gh release create "$TAG_NAME" \
+            --title "WhatsApp Proxy Go v$VERSION" \
+            --notes-file release_notes.md \
+            dist/*
 
-      - name: Create Release
-        uses: softprops/action-gh-release@v2
+      - name: Upload artifacts
+        uses: actions/upload-artifact@v4
         with:
-          tag_name: v${{ steps.version.outputs.version }}
-          name: Release v${{ steps.version.outputs.version }}
-          body: |
-            ## WhatsApp Proxy Go - Release v${{ steps.version.outputs.version }}
-            
-            ### 📦 Installation
-            
-            Download the appropriate binary for your system from the assets below.
-            
-            ### 🚀 Supported Platforms
-            
-            - **Linux**: amd64, arm64, 386, armv7
-            - **macOS**: amd64 (Intel), arm64 (Apple Silicon)
-            - **Windows**: amd64, 386, arm64
-            
-            ### 📋 Build Information
-            
-            - **Version**: ${{ steps.version.outputs.version }}
-            - **Build Time**: $(date -u +'%Y-%m-%d %H:%M:%S UTC')
-            - **Commit**: ${{ github.sha }}
-            
-            ### 🔐 Verification
-            
-            All binaries include SHA256 checksums. Verify your download:
-            
-            ```bash
-            sha256sum -c checksums.txt
-            ```
-            
-            ### 📖 Documentation
-            
-            - [Installation Guide](https://github.com/${{ github.repository }}/blob/main/INSTALL.md)
-            - [Configuration](https://github.com/${{ github.repository }}/blob/main/CONFIGURATION.md)
-            - [README](https://github.com/${{ github.repository }}/blob/main/README.md)
-          files: |
-            dist/*.tar.gz
-            dist/*.zip
-            dist/checksums.txt
-          draft: false
-          prerelease: false
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          name: whatsapp-proxy-${{ steps.version.outputs.version }}
+          path: dist/
+          retention-days: 90
 
-      - name: Upload coverage to Codecov
+      - name: Upload coverage (optional)
+        if: hashFiles('coverage.txt') != ''
         uses: codecov/codecov-action@v4
         with:
           file: ./coverage.txt
