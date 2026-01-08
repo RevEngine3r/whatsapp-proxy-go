@@ -1,0 +1,80 @@
+version: '3.8'
+
+services:
+  whatsapp-proxy:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      args:
+        VERSION: ${VERSION:-dev}
+        BUILD_TIME: ${BUILD_TIME:-unknown}
+    image: whatsapp-proxy-go:${VERSION:-latest}
+    container_name: whatsapp-proxy
+    restart: unless-stopped
+    
+    # Ports
+    ports:
+      - "${PROXY_PORT:-8443}:8443"          # Proxy port
+      - "127.0.0.1:${METRICS_PORT:-8199}:8199"  # Metrics (localhost only)
+    
+    # Environment variables
+    environment:
+      # Server
+      - PROXY_PORT=${PROXY_PORT:-8443}
+      - PROXY_BIND_ADDR=${PROXY_BIND_ADDR:-0.0.0.0}
+      - PROXY_IDLE_TIMEOUT=${PROXY_IDLE_TIMEOUT:-300}
+      - PROXY_MAX_CONNECTIONS=${PROXY_MAX_CONNECTIONS:-1000}
+      
+      # SOCKS5 (set in .env file)
+      - SOCKS5_ENABLED=${SOCKS5_ENABLED:-false}
+      - SOCKS5_HOST=${SOCKS5_HOST:-127.0.0.1}
+      - SOCKS5_PORT=${SOCKS5_PORT:-1080}
+      - SOCKS5_USERNAME=${SOCKS5_USERNAME:-}
+      - SOCKS5_PASSWORD=${SOCKS5_PASSWORD:-}
+      
+      # SSL
+      - SSL_AUTO_GENERATE=${SSL_AUTO_GENERATE:-true}
+      
+      # Logging
+      - LOG_LEVEL=${LOG_LEVEL:-info}
+      - LOG_FORMAT=${LOG_FORMAT:-json}
+      - LOG_OUTPUT=${LOG_OUTPUT:-stdout}
+      
+      # Metrics
+      - METRICS_ENABLED=${METRICS_ENABLED:-true}
+      - METRICS_PORT=${METRICS_PORT:-8199}
+      - METRICS_BIND_ADDR=${METRICS_BIND_ADDR:-0.0.0.0}
+    
+    # Volumes
+    volumes:
+      - ./config.yaml:/etc/whatsapp-proxy/config.yaml:ro
+      - proxy-data:/data
+    
+    # Resource limits
+    deploy:
+      resources:
+        limits:
+          cpus: '2'
+          memory: 512M
+        reservations:
+          cpus: '0.5'
+          memory: 128M
+    
+    # Networks
+    networks:
+      - proxy-network
+    
+    # Logging
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+volumes:
+  proxy-data:
+    driver: local
+
+networks:
+  proxy-network:
+    driver: bridge
