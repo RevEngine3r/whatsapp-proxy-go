@@ -1,0 +1,154 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - 'release'
+
+permissions:
+  contents: write
+
+jobs:
+  build-and-release:
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: '1.21'
+          cache: true
+
+      - name: Generate version from datetime
+        id: version
+        run: |
+          VERSION=$(date -u +'%Y.%m.%d.%H%M')
+          echo "version=$VERSION" >> $GITHUB_OUTPUT
+          echo "Generated version: $VERSION"
+
+      - name: Run tests
+        run: |
+          go test -v -race -coverprofile=coverage.txt -covermode=atomic ./...
+
+      - name: Build binaries
+        env:
+          VERSION: ${{ steps.version.outputs.version }}
+          CGO_ENABLED: 0
+        run: |
+          mkdir -p dist
+          
+          # Define build targets
+          declare -a targets=(
+            "linux/amd64"
+            "linux/arm64"
+            "linux/386"
+            "linux/arm/7"
+            "darwin/amd64"
+            "darwin/arm64"
+            "windows/amd64"
+            "windows/386"
+            "windows/arm64"
+          )
+          
+          # Build for each target
+          for target in "${targets[@]}"; do
+            IFS='/' read -r -a parts <<< "$target"
+            goos="${parts[0]}"
+            goarch="${parts[1]}"
+            goarm="${parts[2]:-}"
+            
+            output_name="whatsapp-proxy-${VERSION}-${goos}-${goarch}"
+            
+            if [ -n "$goarm" ]; then
+              output_name="${output_name}v${goarm}"
+              export GOARM=$goarm
+            fi
+            
+            if [ "$goos" = "windows" ]; then
+              output_name="${output_name}.exe"
+            fi
+            
+            echo "Building for $goos/$goarch${goarm:+v$goarm}..."
+            
+            GOOS=$goos GOARCH=$goarch go build \
+              -trimpath \
+              -ldflags="-s -w -X main.version=${VERSION} -X main.buildTime=$(date -u +'%Y-%m-%dT%H:%M:%SZ') -X main.gitCommit=${GITHUB_SHA::8}" \
+              -o "dist/${output_name}" \
+              ./cmd/whatsapp-proxy
+            
+            # Create tarball for unix systems, zip for windows
+            if [ "$goos" = "windows" ]; then
+              (cd dist && zip "${output_name%.exe}.zip" "$output_name")
+              rm "dist/${output_name}"
+            else
+              tar -czf "dist/${output_name}.tar.gz" -C dist "$output_name"
+              rm "dist/${output_name}"
+            fi
+            
+            unset GOARM
+          done
+
+      - name: Generate checksums
+        run: |
+          cd dist
+          sha256sum * > checksums.txt
+          cat checksums.txt
+
+      - name: Create Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: v${{ steps.version.outputs.version }}
+          name: Release v${{ steps.version.outputs.version }}
+          body: |
+            ## WhatsApp Proxy Go - Release v${{ steps.version.outputs.version }}
+            
+            ### 📦 Installation
+            
+            Download the appropriate binary for your system from the assets below.
+            
+            ### 🚀 Supported Platforms
+            
+            - **Linux**: amd64, arm64, 386, armv7
+            - **macOS**: amd64 (Intel), arm64 (Apple Silicon)
+            - **Windows**: amd64, 386, arm64
+            
+            ### 📋 Build Information
+            
+            - **Version**: ${{ steps.version.outputs.version }}
+            - **Build Time**: $(date -u +'%Y-%m-%d %H:%M:%S UTC')
+            - **Commit**: ${{ github.sha }}
+            
+            ### 🔐 Verification
+            
+            All binaries include SHA256 checksums. Verify your download:
+            
+            ```bash
+            sha256sum -c checksums.txt
+            ```
+            
+            ### 📖 Documentation
+            
+            - [Installation Guide](https://github.com/${{ github.repository }}/blob/main/INSTALL.md)
+            - [Configuration](https://github.com/${{ github.repository }}/blob/main/CONFIGURATION.md)
+            - [README](https://github.com/${{ github.repository }}/blob/main/README.md)
+          files: |
+            dist/*.tar.gz
+            dist/*.zip
+            dist/checksums.txt
+          draft: false
+          prerelease: false
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Upload coverage to Codecov
+        uses: codecov/codecov-action@v4
+        with:
+          file: ./coverage.txt
+          fail_ci_if_error: false
+        env:
+          CODECOV_TOKEN: ${{ secrets.CODECOV_TOKEN }}
