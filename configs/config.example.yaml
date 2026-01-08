@@ -1,0 +1,145 @@
+# WhatsApp Proxy Go - Configuration File
+# Copy this file to config.yaml and customize as needed
+
+# Server configuration
+server:
+  # Port to listen on (single port for all protocols: HTTP, HTTPS, Jabber)
+  port: 8443
+  
+  # Bind address (0.0.0.0 for all interfaces, 127.0.0.1 for localhost only)
+  bind_addr: 0.0.0.0
+  
+  # Idle connection timeout in seconds
+  idle_timeout: 300
+  
+  # Maximum number of concurrent connections
+  max_connections: 1000
+
+# Upstream SOCKS5 proxy configuration
+socks5:
+  # Enable upstream SOCKS5 proxy
+  # When enabled, all WhatsApp traffic will be routed through this proxy
+  enabled: false
+  
+  # SOCKS5 proxy hostname or IP address
+  host: 127.0.0.1
+  
+  # SOCKS5 proxy port
+  port: 1080
+  
+  # SOCKS5 authentication username (leave empty for no authentication)
+  username: ""
+  
+  # SOCKS5 authentication password (leave empty for no authentication)
+  password: ""
+  
+  # Connection timeout in seconds
+  timeout: 30
+
+# SSL/TLS certificate configuration
+ssl:
+  # Automatically generate self-signed certificates
+  # Set to false to use custom certificates
+  auto_generate: true
+  
+  # Custom certificate file path (only used if auto_generate is false)
+  cert_file: ""
+  
+  # Custom private key file path (only used if auto_generate is false)
+  key_file: ""
+  
+  # DNS names to include in certificate Subject Alternative Names (SANs)
+  dns_names:
+    - localhost
+    - proxy.local
+  
+  # IP addresses to include in certificate Subject Alternative Names (SANs)
+  ip_addresses:
+    - 127.0.0.1
+  
+  # Certificate validity period in days (1-3650)
+  validity_days: 365
+  
+  # Directory to cache generated certificates
+  # Leave empty to use default: ~/.whatsapp-proxy/certs
+  cache_dir: ""
+
+# Logging configuration
+logging:
+  # Log level: debug, info, warn, error
+  level: info
+  
+  # Log format: text, json
+  format: text
+  
+  # Log output: stdout, stderr, or a file path
+  output: stdout
+
+# Metrics endpoint configuration
+metrics:
+  # Enable Prometheus-compatible metrics endpoint
+  enabled: true
+  
+  # Metrics server port
+  port: 8199
+  
+  # Metrics bind address (127.0.0.1 recommended for security)
+  bind_addr: 127.0.0.1
+
+# ==============================================================================
+# COMMON CONFIGURATION EXAMPLES
+# ==============================================================================
+
+# Example 1: Basic proxy without SOCKS5 upstream
+# Use the default configuration above (socks5.enabled: false)
+
+# Example 2: Proxy with SOCKS5 upstream (no authentication)
+# socks5:
+#   enabled: true
+#   host: 127.0.0.1
+#   port: 1080
+#   username: ""
+#   password: ""
+
+# Example 3: Proxy with SOCKS5 upstream (with authentication)
+# socks5:
+#   enabled: true
+#   host: proxy.example.com
+#   port: 1080
+#   username: myuser
+#   password: mypassword
+
+# Example 4: Using custom SSL certificates
+# ssl:
+#   auto_generate: false
+#   cert_file: /path/to/cert.pem
+#   key_file: /path/to/key.pem
+
+# Example 5: Production logging to file with JSON format
+# logging:
+#   level: warn
+#   format: json
+#   output: /var/log/whatsapp-proxy/proxy.log
+
+# Example 6: High-load configuration
+# server:
+#   port: 8443
+#   bind_addr: 0.0.0.0
+#   idle_timeout: 600
+#   max_connections: 5000
+
+# ==============================================================================
+# ENVIRONMENT VARIABLES
+# ==============================================================================
+# All configuration options can be overridden using environment variables.
+# Use the prefix WHATSAPP_PROXY_ followed by the configuration path.
+# 
+# Examples:
+#   WHATSAPP_PROXY_SERVER_PORT=9443
+#   WHATSAPP_PROXY_SOCKS5_ENABLED=true
+#   WHATSAPP_PROXY_SOCKS5_HOST=proxy.example.com
+#   WHATSAPP_PROXY_LOGGING_LEVEL=debug
+#
+# Note: Nested configuration uses underscores. For example:
+#   server.port -> WHATSAPP_PROXY_SERVER_PORT
+#   socks5.host -> WHATSAPP_PROXY_SOCKS5_HOST
